@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S&P 500 税务损耗计算器 (Tax Drag Calculator)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto', sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2d3748; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 30px; font-size: 14px; }
+        
+        /* Input Section */
+        .controls { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; background: #edf2f7; padding: 25px; border-radius: 8px; margin-bottom: 30px; border: 1px solid #e2e8f0; }
+        .control-group { display: flex; flex-direction: column; min-width: 150px; }
+        label { font-size: 13px; font-weight: bold; color: #4a5568; margin-bottom: 5px; }
+        input, select { padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 16px; text-align: right; width: 100%; box-sizing: border-box; }
+        select { text-align: center; } 
+        
+        /* Tax Inputs Highlight */
+        .tax-group { border-left: 3px solid #e53e3e; padding-left: 15px; }
+
+        /* Summary Cards */
+        .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
+        .card { padding: 30px; border-radius: 10px; text-align: center; color: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; flex-direction: column; justify-content: center; position: relative; }
+        .card h3 { margin: 0 0 15px 0; font-size: 18px; font-weight: 500; opacity: 0.95; }
+        .card .value { font-size: 36px; font-weight: bold; }
+        .card .sub-info { font-size: 14px; margin-top: 5px; opacity: 0.9; }
+        
+        .card.blue { background: linear-gradient(135deg, #4299e1, #2b6cb0); } /* Tax Free */
+        .card.gray { background: linear-gradient(135deg, #718096, #4a5568); } /* Taxable */
+
+        /* Difference Badge */
+        .diff-section { text-align: center; margin-bottom: 30px; font-size: 16px; color: #e53e3e; font-weight: bold; padding: 15px; background: #fff5f5; border-radius: 8px; border: 1px solid #feb2b2; }
+
+        /* Chart */
+        .chart-container { position: relative; height: 450px; width: 100%; margin-bottom: 40px; }
+
+        /* Data Table */
+        .table-container { overflow-x: auto; max-height: 500px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+        th { background-color: #2d3748; color: #fff; padding: 12px; text-align: right; font-weight: 500; position: sticky; top: 0; z-index: 10;}
+        th:first-child { text-align: left; left: 0; z-index: 11; }
+        td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: right; }
+        td:first-child { text-align: left; font-weight: bold; position: sticky; left: 0; background-color: #f7fafc; border-right: 1px solid #e2e8f0; }
+        tr:nth-child(even) td { background-color: #f7fafc; }
+        tr:hover td { background-color: #ebf8ff; }
+        
+        .tax-col { background-color: #e2e8f0 !important; color: #2d3748; font-weight: bold; border-left: 2px solid #a0aec0; border-right: 2px solid #a0aec0;}
+        .liquidation-note { font-size: 14px; background: rgba(0,0,0,0.2); padding: 10px; margin-top: 15px; border-radius: 6px; text-align: left; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>S&P 500 共同基金：税务损耗 (Tax Drag) 演示</h1>
+    <p class="subtitle">模拟真实换手率 (Turnover) 对资本利得税的影响</p>
+    
+    <!-- Inputs -->
+    <div class="controls">
+        <div class="control-group">
+            <label>初始资金 ($)</label>
+            <input type="number" id="initialInvest" value="10000" step="1000">
+        </div>
+        <div class="control-group">
+            <label>开始年份</label>
+            <select id="startYearSelect"></select>
+        </div>
+        <div class="control-group">
+            <label>结束年份</label>
+            <select id="endYearSelect"></select>
+        </div>
+        
+        <!-- Tax Params -->
+        <div class="control-group tax-group">
+            <label>股息税率 (Div) %</label>
+            <input type="number" id="divTaxRate" value="32.00" step="1">
+        </div>
+        <div class="control-group tax-group">
+            <label>资本利得税 (Gain) %</label>
+            <input type="number" id="cgTaxRate" value="21.00" step="1">
+        </div>
+        <div class="control-group tax-group">
+            <label>基金换手率 (Turnover) %</label>
+            <input type="number" id="turnoverRate" value="5.00" step="1">
+            <small style="color: #666; font-size: 11px;">(Vanguard 500 约 3%-5%)</small>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary">
+        <div class="card blue">
+            <h3>免税/延税账户 (IUL/IRA)</h3>
+            <div class="value" id="spTotalFinal">$0</div>
+            <div class="sub-info" id="spTotalCAGR">CAGR: 0.00%</div>
+            <div class="sub-info" style="font-size: 12px; opacity: 0.8;">(红利全额复利滚存，取用时根据账户类型定税)</div>
+        </div>
+        <div class="card gray">
+            <h3>应税账户 (Taxable Mutual Fund)</h3>
+            <div class="value" id="spTaxableFinal">$0</div>
+            <div class="sub-info" id="spTaxableCAGR">CAGR: 0.00%</div>
+            <div class="liquidation-note">
+                <strong>若今日全部卖出 (清算):</strong><br>
+                账户余额: <span id="liqBalance">$0</span><br>
+                <span style="color:#ffcccc;">- 需补交税款: <span id="liquidationTax">$0</span></span><br>
+                -------------------------<br>
+                <strong>最终到手净值: <span id="liquidationValue" style="font-weight:bold; color:#fff;">$0</span></strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- Difference Highlight -->
+    <div class="diff-section" id="diffSection">
+        ...
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-container">
+        <canvas id="myChart"></canvas>
+    </div>
+
+    <!-- Table -->
+    <h3 style="margin-bottom: 15px;">年度税务损耗明细表</h3>
+    <div class="table-container">
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>年份</th>
+                    <th>市场<br>价格回报</th>
+                    <th>股息率</th>
+                    <th>免税账户<br>总价值</th>
+                    <th class="tax-col">应税账户<br>税后回报率</th>
+                    <th class="tax-col">应税账户<br>总价值</th>
+                    <th>当年<br>交税金额</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- JS will fill this -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // 历史数据 (1950-2025) - 包含 2024/2025 真实数据
+    const fullHistoryData = [
+        {year: 1950, sp: 21.78, div: 7.21},
+        {year: 1951, sp: 16.46, div: 6.13},
+        {year: 1952, sp: 11.78, div: 5.67},
+        {year: 1953, sp: -6.62, div: 5.54},
+        {year: 1954, sp: 45.02, div: 4.67},
+        {year: 1955, sp: 26.40, div: 4.09},
+        {year: 1956, sp: 2.62, div: 3.91},
+        {year: 1957, sp: -14.31, div: 4.29},
+        {year: 1958, sp: 38.06, div: 3.46},
+        {year: 1959, sp: 8.48, div: 3.13},
+        {year: 1960, sp: -2.97, div: 3.42},
+        {year: 1961, sp: 23.13, div: 2.92},
+        {year: 1962, sp: -11.81, div: 3.43},
+        {year: 1963, sp: 18.89, div: 3.13},
+        {year: 1964, sp: 12.97, div: 2.96},
+        {year: 1965, sp: 9.06, div: 2.98},
+        {year: 1966, sp: -13.09, div: 3.55},
+        {year: 1967, sp: 20.09, div: 3.03},
+        {year: 1968, sp: 7.66, div: 2.97},
+        {year: 1969, sp: -11.36, div: 3.39},
+        {year: 1970, sp: 0.10, div: 3.86},
+        {year: 1971, sp: 10.79, div: 3.09},
+        {year: 1972, sp: 15.63, div: 2.76},
+        {year: 1973, sp: -17.37, div: 3.59},
+        {year: 1974, sp: -29.72, div: 5.37},
+        {year: 1975, sp: 31.55, div: 4.31},
+        {year: 1976, sp: 19.15, div: 3.88},
+        {year: 1977, sp: -11.50, div: 4.62},
+        {year: 1978, sp: 1.06, div: 5.28},
+        {year: 1979, sp: 12.31, div: 5.43},
+        {year: 1980, sp: 25.77, div: 5.26},
+        {year: 1981, sp: -9.73, div: 5.42},
+        {year: 1982, sp: 14.76, div: 5.83},
+        {year: 1983, sp: 17.27, div: 4.41},
+        {year: 1984, sp: 1.40, div: 4.58},
+        {year: 1985, sp: 26.33, div: 4.25},
+        {year: 1986, sp: 14.62, div: 3.51},
+        {year: 1987, sp: 2.03, div: 3.09},
+        {year: 1988, sp: 12.40, div: 3.64},
+        {year: 1989, sp: 27.25, div: 3.16},
+        {year: 1990, sp: -6.56, div: 3.6},
+        {year: 1991, sp: 26.31, div: 3.8},
+        {year: 1992, sp: 4.46, div: 3.0},
+        {year: 1993, sp: 7.06, div: 2.7},
+        {year: 1994, sp: -1.54, div: 2.8},
+        {year: 1995, sp: 34.11, div: 2.3},
+        {year: 1996, sp: 20.26, div: 2.0},
+        {year: 1997, sp: 31.01, div: 1.6},
+        {year: 1998, sp: 26.67, div: 1.3},
+        {year: 1999, sp: 19.53, div: 1.1},
+        {year: 2000, sp: -10.14, div: 1.2},
+        {year: 2001, sp: -13.04, div: 1.3},
+        {year: 2002, sp: -23.37, div: 1.8},
+        {year: 2003, sp: 26.38, div: 1.6},
+        {year: 2004, sp: 8.99, div: 1.6},
+        {year: 2005, sp: 3.00, div: 1.8},
+        {year: 2006, sp: 13.62, div: 1.8},
+        {year: 2007, sp: 3.53, div: 1.9},
+        {year: 2008, sp: -38.49, div: 2.2},
+        {year: 2009, sp: 23.45, div: 2.0},
+        {year: 2010, sp: 12.78, div: 1.8},
+        {year: 2011, sp: 0.00, div: 2.1},
+        {year: 2012, sp: 13.41, div: 2.2},
+        {year: 2013, sp: 29.60, div: 1.9},
+        {year: 2014, sp: 11.39, div: 1.9},
+        {year: 2015, sp: -0.73, div: 2.1},
+        {year: 2016, sp: 9.54, div: 2.0},
+        {year: 2017, sp: 19.42, div: 1.8},
+        {year: 2018, sp: -6.24, div: 1.9},
+        {year: 2019, sp: 28.88, div: 1.8},
+        {year: 2020, sp: 16.26, div: 1.5},
+        {year: 2021, sp: 26.89, div: 1.3},
+        {year: 2022, sp: -19.44, div: 1.7},
+        {year: 2023, sp: 24.23, div: 1.5},
+        {year: 2024, sp: 23.31, div: 1.7}, 
+        {year: 2025, sp: 16.11, div: 1.4}  
+    ];
+
+    let chartInstance = null;
+
+    function formatMoney(amount) {
+        return '$' + amount.toLocaleString('en-US', {maximumFractionDigits: 0});
+    }
+
+    function formatPercent(num) {
+        return num.toFixed(2) + '%';
+    }
+
+    function calculateCAGR(start, end, years) {
+        if (start === 0 || years === 0) return 0;
+        return (Math.pow(end / start, 1 / years) - 1) * 100;
+    }
+
+    function initYearSelects() {
+        const startSel = document.getElementById('startYearSelect');
+        const endSel = document.getElementById('endYearSelect');
+        
+        fullHistoryData.forEach(d => {
+            const optStart = new Option(d.year, d.year);
+            const optEnd = new Option(d.year, d.year);
+            startSel.add(optStart);
+            endSel.add(optEnd);
+        });
+
+        startSel.value = 1980;
+        endSel.value = 2025;
+
+        startSel.addEventListener('change', () => {
+            if(parseInt(startSel.value) > parseInt(endSel.value)) endSel.value = startSel.value;
+            updateCalculator();
+        });
+        endSel.addEventListener('change', () => {
+            if(parseInt(endSel.value) < parseInt(startSel.value)) startSel.value = endSel.value;
+            updateCalculator();
+        });
+    }
+
+    function updateCalculator() {
+        const initial = parseFloat(document.getElementById('initialInvest').value);
+        const divTaxRate = parseFloat(document.getElementById('divTaxRate').value) / 100;
+        const cgTaxRate = parseFloat(document.getElementById('cgTaxRate').value) / 100;
+        const turnoverRate = parseFloat(document.getElementById('turnoverRate').value) / 100;
+        
+        const startYear = parseInt(document.getElementById('startYearSelect').value);
+        const endYear = parseInt(document.getElementById('endYearSelect').value);
+
+        const activeData = fullHistoryData.filter(d => d.year >= startYear && d.year <= endYear);
+
+        let spTotalVal = initial; // Tax Free
+        let spTaxableVal = initial; // Taxable
+        
+        // For Basis Tracking (用于准确计算清算时的税)
+        // 成本基础 = 初始本金 + 所有已交税的再投资金额
+        let costBasis = initial;
+
+        const labels = [`Start (${startYear-1})`]; 
+        const spTotalData = [initial];
+        const spTaxableData = [initial];
+        
+        const tableBody = document.querySelector('#dataTable tbody');
+        tableBody.innerHTML = `
+            <tr style="background-color: #edf2f7;">
+                <td>${startYear-1}</td>
+                <td>-</td>
+                <td>-</td>
+                <td>${formatMoney(initial)}</td>
+                <td class="tax-col">-</td>
+                <td class="tax-col">${formatMoney(initial)}</td>
+                <td>-</td>
+            </tr>
+        `;
+
+        activeData.forEach(d => {
+            labels.push(d.year);
+
+            // 1. 免税/总回报 (No Tax Drag)
+            // 简单复利：价格增长 + 股息再投资，不扣税
+            spTotalVal = spTotalVal * (1 + (d.sp + d.div) / 100);
+            spTotalData.push(spTotalVal);
+
+            // 2. 应税账户 (Optimized Logic)
+            // 先计算这一年的“账面总值”（含股息）
+            let priceComponent = spTaxableVal * (1 + d.sp/100);
+            let divComponent = spTaxableVal * (d.div/100);
+            let grossAccountValue = priceComponent + divComponent;
+            
+            // A. 股息税 (Dividend Tax) - 每年必交
+            let taxOnDiv = divComponent * divTaxRate;
+            
+            // B. 资本利得税 (Capital Gains Tax) - 优化后的核心逻辑
+            // 基金换手卖出的是“这一部分资产里包含的所有积累收益”，不仅仅是今年的。
+            // 估算逻辑：累计未实现收益 = 当前纯价格部分市值 - 当前成本基础
+            // 只有当有正收益时，才会产生资本利得税
+            let currentUnrealizedGain = priceComponent - costBasis;
+            
+            let realizedGain = 0;
+            let taxOnGain = 0;
+            
+            if (currentUnrealizedGain > 0) {
+                // 按照换手率实现一部分收益
+                realizedGain = currentUnrealizedGain * turnoverRate;
+                taxOnGain = realizedGain * cgTaxRate;
+            }
+
+            // 扣税
+            let totalTax = taxOnDiv + taxOnGain;
+            spTaxableVal = grossAccountValue - totalTax; // 税后余额
+            
+            // 3. 更新成本基础 (Cost Basis Update)
+            // 成本基础增加量 = 那些“已经交过税并留在账户里的钱”
+            // 即：(股息 - 股息税) + (已实现收益 - 资本利得税)
+            // 理解：已实现收益部分的“旧成本”被销毁，替换成了“当前市值的成本”（因为交了税，基数抬高了）
+            let netDivReinvest = divComponent - taxOnDiv;
+            let netGainReinvest = realizedGain - taxOnGain;
+            
+            costBasis += netDivReinvest + netGainReinvest;
+
+            // 计算当年税后净回报率（仅用于展示）
+            let prevVal = spTaxableData[spTaxableData.length - 1];
+            let netReturnPercent = ((spTaxableVal - prevVal) / prevVal) * 100;
+            
+            spTaxableData.push(spTaxableVal);
+
+            // Table Row
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${d.year}</td>
+                <td class="${d.sp >= 0 ? 'positive' : 'negative'}">${formatPercent(d.sp)}</td>
+                <td>${formatPercent(d.div)}</td>
+                <td style="font-weight:bold; color:#2b6cb0;">${formatMoney(spTotalVal)}</td>
+                <td class="tax-col ${netReturnPercent >= 0 ? 'positive' : 'negative'}">${formatPercent(netReturnPercent)}</td>
+                <td class="tax-col" style="font-weight:bold; color:#4a5568;">${formatMoney(spTaxableVal)}</td>
+                <td style="color:#e53e3e;">${totalTax > 0 ? formatMoney(totalTax) : '-'}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+
+        // Summary
+        const years = activeData.length;
+        document.getElementById('spTotalFinal').innerText = formatMoney(spTotalVal);
+        document.getElementById('spTotalCAGR').innerText = 'CAGR: ' + formatPercent(calculateCAGR(initial, spTotalVal, years));
+
+        document.getElementById('spTaxableFinal').innerText = formatMoney(spTaxableVal);
+        document.getElementById('spTaxableCAGR').innerText = 'CAGR: ' + formatPercent(calculateCAGR(initial, spTaxableVal, years));
+
+        // Liquidation Calculation
+        // 最终卖出时，只需对“剩余未实现收益”交税
+        let finalUnrealizedGain = spTaxableVal - costBasis;
+        if (finalUnrealizedGain < 0) finalUnrealizedGain = 0;
+        
+        let liquidationTax = finalUnrealizedGain * cgTaxRate;
+        let liquidationValue = spTaxableVal - liquidationTax;
+        
+        document.getElementById('liqBalance').innerText = formatMoney(spTaxableVal);
+        document.getElementById('liquidationTax').innerText = formatMoney(liquidationTax);
+        document.getElementById('liquidationValue').innerText = formatMoney(liquidationValue);
+
+        const lostWealth = spTotalVal - liquidationValue; // Compare fully liquidated value vs tax free
+        document.getElementById('diffSection').innerText = `💸 与免税账户相比，因税务损耗 (Tax Drag) 最终少赚了: ${formatMoney(lostWealth)}`;
+
+        // Chart
+        updateChart(labels, spTotalData, spTaxableData);
+    }
+
+    function updateChart(labels, spTotalData, spTaxableData) {
+        const ctx = document.getElementById('myChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '免税/延税账户 (Total Return)',
+                        data: spTotalData,
+                        borderColor: '#3182ce',
+                        backgroundColor: '#3182ce',
+                        borderWidth: 3,
+                        pointRadius: 0
+                    },
+                    {
+                        label: '应税账户 (After-Tax Accumulation)',
+                        data: spTaxableData,
+                        borderColor: '#718096',
+                        backgroundColor: '#718096',
+                        borderWidth: 3,
+                        borderDash: [5, 5], 
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: { y: { ticks: { callback: v => '$' + v.toLocaleString() } } },
+                plugins: {
+                    tooltip: {
+                        callbacks: { label: c => c.dataset.label + ': $' + c.parsed.y.toLocaleString('en-US', {maximumFractionDigits: 0}) }
+                    }
+                }
+            }
+        });
+    }
+
+    initYearSelects();
+    updateCalculator();
+
+    document.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', updateCalculator);
+    });
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WFG 税务策略与产品对照演示</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #8e44ad; 
+            --taxable-color: #c0392b;
+            --deferred-color: #d35400;
+            --annuity-color: #2980b9;
+            --free-color: #27ae60;
+            --ideal-color: #d4ac0d;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', Tahoma, sans-serif;
+            margin: 0; padding: 20px; background-color: #f4f7f6; color: #333;
+        }
+
+        .container {
+            max-width: 1400px; margin: 0 auto; background: white;
+            padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        h1 { text-align: center; color: var(--primary-color); margin-bottom: 5px; }
+        
+        .subtitle {
+            text-align: center; color: #7f8c8d; margin-bottom: 30px;
+            font-size: 0.95em; line-height: 1.6;
+        }
+
+        .grid-layout {
+            display: grid; grid-template-columns: 320px 1fr; gap: 25px;
+        }
+
+        @media (max-width: 1100px) {
+            .grid-layout { grid-template-columns: 1fr; }
+        }
+
+        .input-section {
+            background: #f8f9fa; padding: 20px; border-radius: 12px; border: 1px solid #e9ecef;
+        }
+
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9em; }
+        input {
+            width: 100%; padding: 10px; border: 1px solid #ccd1d1;
+            border-radius: 6px; box-sizing: border-box; font-size: 15px;
+        }
+
+        button {
+            width: 100%; padding: 15px; background-color: var(--accent-color);
+            color: white; border: none; border-radius: 6px; cursor: pointer;
+            font-size: 16px; font-weight: bold; margin-top: 10px; transition: 0.3s;
+        }
+        button:hover { background-color: #732d91; }
+
+        .summary-cards {
+            display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 25px;
+        }
+
+        .card {
+            padding: 15px 5px; border-radius: 10px; color: white; text-align: center;
+        }
+        .card h3 { margin: 0 0 5px 0; font-size: 0.85em; }
+        .card .product-name { font-weight: bold; font-size: 0.95em; margin-bottom: 5px; display: block; color: #fff; background: rgba(0,0,0,0.2); padding: 2px 0; border-radius: 4px; }
+        .card .tax-info { font-size: 0.65em; margin-bottom: 8px; height: 32px; line-height: 1.2; opacity: 0.9; }
+        .card .value { font-size: 1.15em; font-weight: bold; }
+        
+        .bg-taxable { background: var(--taxable-color); }
+        .bg-deferred { background: var(--deferred-color); }
+        .bg-annuity { background: var(--annuity-color); }
+        .bg-free { background: var(--free-color); }
+        .bg-ideal { background: var(--ideal-color); }
+
+        .chart-container { position: relative; height: 450px; width: 100%; margin-bottom: 20px; }
+
+        .table-wrapper { overflow-x: auto; max-height: 350px; border: 1px solid #eee; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        th, td { padding: 10px; text-align: right; border-bottom: 1px solid #eee; }
+        th { background-color: #f2f4f4; color: var(--primary-color); position: sticky; top: 0; z-index: 10; }
+        td:first-child { text-align: center; font-weight: bold; }
+        .highlight-col { background-color: #fef9e7; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>WFG 税务与理财产品对比演示</h1>
+    <div class="subtitle">
+        可视化不同理财工具的税务损耗：通过正确的税务结构，让您的财富积累效率最大化。
+    </div>
+
+    <div class="grid-layout">
+        <div class="input-section">
+            <div class="input-group">
+                <label>初始投资 (税前 $)</label>
+                <input type="number" id="initialInput" value="100000">
+            </div>
+            <div class="input-group">
+                <label>预期回报率 (%)</label>
+                <input type="number" id="rateOfReturn" value="7">
+            </div>
+            <div class="input-group">
+                <label style="color:var(--taxable-color);">当前税率 (%)</label>
+                <input type="number" id="currentTax" value="30">
+            </div>
+            <div class="input-group">
+                <label style="color:var(--deferred-color);">退休预计税率 (%)</label>
+                <input type="number" id="futureTax" value="35">
+            </div>
+            <div class="input-group">
+                <label>投资年限 (Years)</label>
+                <input type="number" id="years" value="30">
+            </div>
+            <button onclick="calculate()">即刻生成对比报告</button>
+        </div>
+
+        <div class="results-section">
+            <div class="summary-cards">
+                <div class="card bg-taxable">
+                    <h3>1. 年年交税</h3>
+                    <span class="product-name">CD / 股票 / 基金</span>
+                    <div class="tax-info">本金税后投入<br>增长部分年年交税</div>
+                    <div class="value" id="val-taxable">$0</div>
+                </div>
+                <div class="card bg-deferred">
+                    <h3>2. 以后再交</h3>
+                    <span class="product-name">401k / Traditional IRA</span>
+                    <div class="tax-info">税前本金投入<br>取用时全额交税</div>
+                    <div class="value" id="val-deferred">$0</div>
+                </div>
+                <div class="card bg-annuity">
+                    <h3>3. 增长延税</h3>
+                    <span class="product-name">NQ Annuity (年金)</span>
+                    <div class="tax-info">税后本金投入<br>仅增长部分延后交税</div>
+                    <div class="value" id="val-annuity">$0</div>
+                </div>
+                <div class="card bg-free">
+                    <h3>4. 永不交税</h3>
+                    <span class="product-name">Roth IRA / IUL (7702)</span>
+                    <div class="tax-info">税后本金投入<br>取用本金与增长全免税</div>
+                    <div class="value" id="val-free">$0</div>
+                </div>
+                <div class="card bg-ideal">
+                    <h3>5. 理想账号</h3>
+                    <span class="product-name">理想状态 (Deductible+Free)</span>
+                    <div class="tax-info">投入免税 + 增长免税<br>取用全额免税</div>
+                    <div class="value" id="val-ideal">$0</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="growthChart"></canvas>
+            </div>
+
+            <div class="table-wrapper">
+                <table id="resultTable">
+                    <thead>
+                        <tr>
+                            <th>年份</th>
+                            <th>CD/股票 (年年交税)</th>
+                            <th>401k/IRA (延迟交)</th>
+                            <th>Annuity (增延税)</th>
+                            <th>Roth/IUL (7702免税)</th>
+                            <th style="background:#fef9e7">理想账号 (完全免费)</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let myChart = null;
+    const format = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+
+    function calculate() {
+        const initial = parseFloat(document.getElementById('initialInput').value);
+        const rate = parseFloat(document.getElementById('rateOfReturn').value) / 100;
+        const taxCur = parseFloat(document.getElementById('currentTax').value) / 100;
+        const taxFut = parseFloat(document.getElementById('futureTax').value) / 100;
+        const years = parseInt(document.getElementById('years').value);
+
+        let data = { labels: [], taxable: [], deferred: [], annuity: [], free: [], ideal: [] };
+        let tableHTML = "";
+
+        // 初始化余额逻辑
+        let balTaxable = initial * (1 - taxCur); // CD等已交税本金
+        let balFree = initial * (1 - taxCur);    // Roth/IUL已交税本金
+        let balAnnuity = initial * (1 - taxCur); // NQ Annuity已交税本金
+        const annuityPrincipal = balAnnuity;
+        let balDeferred = initial;              // 401k全额本金投入
+        let balIdeal = initial;                 // 理想状态
+
+        for (let i = 1; i <= years; i++) {
+            data.labels.push('第' + i + '年');
+
+            // 1. 年年交税 (CD/Stocks) - 增长每年被税扣掉
+            balTaxable *= (1 + rate * (1 - taxCur));
+            
+            // 2. 以后交税 (401k) - 全额滚存，最后按退休税率交
+            balDeferred *= (1 + rate);
+            let netDeferred = balDeferred * (1 - taxFut);
+
+            // 3. 增长延税 (NQ Annuity) - 增长延税，最后增长部分按退休税率交
+            balAnnuity *= (1 + rate);
+            let gain = balAnnuity - annuityPrincipal;
+            let netAnnuity = balAnnuity - (gain * taxFut);
+
+            // 4. 取用增长全免 (Roth/IUL/7702) - 本金交税后，增长永不交税
+            balFree *= (1 + rate);
+
+            // 5. 理想账号 (仅作对比演示)
+            balIdeal *= (1 + rate);
+
+            data.taxable.push(balTaxable);
+            data.deferred.push(netDeferred);
+            data.annuity.push(netAnnuity);
+            data.free.push(balFree);
+            data.ideal.push(balIdeal);
+
+            if (i % 5 === 0 || i === years) { // 减少表格行数显示
+                tableHTML += `<tr>
+                    <td>${i}</td>
+                    <td>${format(balTaxable)}</td>
+                    <td>${format(netDeferred)}</td>
+                    <td>${format(netAnnuity)}</td>
+                    <td>${format(balFree)}</td>
+                    <td class="highlight-col">${format(balIdeal)}</td>
+                </tr>`;
+            }
+        }
+
+        document.getElementById('val-taxable').innerText = format(data.taxable[years-1]);
+        document.getElementById('val-deferred').innerText = format(data.deferred[years-1]);
+        document.getElementById('val-annuity').innerText = format(data.annuity[years-1]);
+        document.getElementById('val-free').innerText = format(data.free[years-1]);
+        document.getElementById('val-ideal').innerText = format(data.ideal[years-1]);
+        document.querySelector('#resultTable tbody').innerHTML = tableHTML;
+
+        renderChart(data);
+    }
+
+    function renderChart(d) {
+        const ctx = document.getElementById('growthChart').getContext('2d');
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: d.labels,
+                datasets: [
+                    { label: '银行CD/股票 (年年交税)', data: d.taxable, borderColor: '#c0392b', borderWidth: 2, pointRadius: 0 },
+                    { label: '401k/IRA (以后再交)', data: d.deferred, borderColor: '#d35400', borderDash: [5,5], borderWidth: 2, pointRadius: 0 },
+                    { label: 'Annuity (增长延税)', data: d.annuity, borderColor: '#2980b9', borderWidth: 2, pointRadius: 0 },
+                    { label: 'Roth/IUL 7702 (取增免税)', data: d.free, borderColor: '#27ae60', borderWidth: 4, pointRadius: 0 },
+                    { label: '理想状态 (全免)', data: d.ideal, borderColor: '#f1c40f', borderWidth: 5, pointRadius: 0, borderDash: [2, 2] }
+                ]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 15, font: { size: 12, weight: 'bold' } } },
+                    tooltip: { padding: 12 }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        ticks: { callback: value => '$' + value.toLocaleString(), font: { size: 10 } } 
+                    },
+                    x: { ticks: { font: { size: 10 } } }
+                }
+            }
+        });
+    }
+    window.onload = calculate;
+</script>
+</body>
+</html>
